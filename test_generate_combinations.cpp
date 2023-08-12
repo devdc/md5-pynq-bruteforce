@@ -15,6 +15,8 @@ int main()
     const unsigned char md5bf[] = "47bce5c74f589f4867dbd57e9ca9f808"; // hashed "aaa"
 
     generate_combinations(md5bf, charset, out);
-    printf((const char*)out);
+    for (int i = 0; i < 4; i++) {
+		printf("%c", out[i]);
+	}
     return 0;
 }
