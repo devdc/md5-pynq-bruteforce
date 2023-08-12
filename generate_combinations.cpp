@@ -1,26 +1,12 @@
 #include "generate_combinations.h"
 
-void print_md5(unsigned char* md5);
+//void print_md5(unsigned char* md5);
+//
+//void print_md5(unsigned char* md5) {
+//    for(unsigned char* p=md5; p<md5+16; ++p) printf("%02x",*p);
+//    printf("\n");
+//}
 
-void print_md5(unsigned char* md5) {
-    for(unsigned char* p=md5; p<md5+16; ++p) printf("%02x",*p);
-    printf("\n");
-}
-
-#define NUM_VALUES 16
-#define HEX_CHARS_PER_INT 2
-void int_to_hex_string(unsigned int values[NUM_VALUES], unsigned char hexString[NUM_VALUES * HEX_CHARS_PER_INT + 1]);
-void int_to_hex_string(unsigned int values[NUM_VALUES], unsigned char hexString[NUM_VALUES * HEX_CHARS_PER_INT + 1]) {
-    char hexChars[] = "0123456789abcdef";
-
-    for (int i = 0; i < NUM_VALUES; ++i) {
-        for (int j = 0; j < HEX_CHARS_PER_INT; ++j) {
-            // Extract each nibble (4-bits) of the int, and map to its hex representation
-            hexString[i * HEX_CHARS_PER_INT + (HEX_CHARS_PER_INT - 1 - j)] = hexChars[(values[i] >> (j * 4)) & 0xF];
-        }
-    }
-    hexString[NUM_VALUES * HEX_CHARS_PER_INT] = '\0';
-}
 
 void byte_to_hex_string(unsigned char* bytes, size_t length, unsigned char* hexString);
 void byte_to_hex_string(unsigned char* bytes, size_t length, unsigned char* hexString) {
@@ -39,8 +25,7 @@ void byte_to_hex_string(unsigned char* bytes, size_t length, unsigned char* hexS
     hexString[length * 2] = '\0';
 }
 
-//void generate_combinations(const unsigned char md5bf[16], const unsigned char charset[CHARSET_LENGTH], int charset_size, unsigned char out[4])
-void generate_combinations(const unsigned char md5bf[16], const unsigned char charset[CHARSET_LENGTH], unsigned char out[4])
+void generate_combinations(const unsigned char md5bf[32], const unsigned char charset[CHARSET_LENGTH], unsigned char out[4])
 {
 #pragma HLS INTERFACE s_axilite port=md5bf
 #pragma HLS INTERFACE s_axilite port=charset
@@ -96,9 +81,8 @@ void generate_combinations(const unsigned char md5bf[16], const unsigned char ch
 
         unsigned int md5out[16];
         md5((unsigned int*)padded, md5out, padded_size);
-        print_md5((unsigned char*)md5out);
+//        print_md5((unsigned char*)md5out);
         unsigned char md5out_hex[32];
-        //int_to_hex_string(md5out, md5out_hex);
         byte_to_hex_string((unsigned char*)md5out, 32, md5out_hex);
         bool match = true;
         for (int i=0; i<32; i++)
@@ -111,7 +95,10 @@ void generate_combinations(const unsigned char md5bf[16], const unsigned char ch
         }
         if (match)
         {
-        	out = c;
+        	for (int i = 0; i < LENGTH; i++)
+			{
+				out[i] = c[i];
+			}
         	break;
         }
 
