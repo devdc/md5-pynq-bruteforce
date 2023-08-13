@@ -18,3 +18,4 @@ ap_uint<32> factorial(ap_uint<8> n);
 ap_uint<32> permutation(ap_uint<8> n, ap_uint<8> r);
 // Function to compute sum of permutations of n items taken up to k at a time.
 ap_uint<32> sum_permutations(ap_uint<8> n, ap_uint<8> k);
+ap_uint<32> compute_permutations_with_repetition(ap_uint<8> n, ap_uint<8> r);
