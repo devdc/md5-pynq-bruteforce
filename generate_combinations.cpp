@@ -41,9 +41,10 @@ void generate_combinations(const unsigned char md5bf[32], const unsigned char ch
 
     // from all the items
     ap_uint<8> n = CHARSET_LENGTH;
-    // choose k items
+    // choose r items
 	ap_uint<8> k = LENGTH;
-    int max_iterations = sum_permutations(n, k);
+//    int max_iterations = sum_permutations(n, k);
+    int max_iterations = compute_permutations_with_repetition(n, k);
     while (max_iterations--)
     {
 
@@ -130,6 +131,15 @@ void generate_combinations(const unsigned char md5bf[32], const unsigned char ch
         }
 
     }
+}
+
+// HLS function to compute the number of permutations with repetition
+ap_uint<32> compute_permutations_with_repetition(ap_uint<8> n, ap_uint<8> r) {
+    ap_uint<32> total_permutations = 1;
+    for(ap_uint<8> i = 0; i < r; ++i) {
+        total_permutations *= n;
+    }
+    return total_permutations;
 }
 
 // Function to compute factorial of n.
