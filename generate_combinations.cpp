@@ -1,14 +1,130 @@
 #include "generate_combinations.h"
 
-//void print_md5(unsigned char* md5);
-//
-//void print_md5(unsigned char* md5) {
-//    for(unsigned char* p=md5; p<md5+16; ++p) printf("%02x",*p);
-//    printf("\n");
-//}
 
 
-void byte_to_hex_string(unsigned char* bytes, size_t length, unsigned char* hexString);
+void generate_next_combination(bool &carry, unsigned char *current, const unsigned char *charset);
+bool is_md5_match(const unsigned char *in_1, unsigned char *in_2);
+void copy_pad(char *padded, unsigned char *c, size_t length, unsigned int &padded_size);
+void copy_uchar(unsigned char *to, unsigned char *from, size_t length);
+
+
+void generate_combinations(const unsigned char md5bf[MD5_CHAR_LENGTH], const unsigned char charset[CHARSET_LENGTH], unsigned char out[LENGTH])
+{
+
+#pragma HLS INTERFACE s_axilite port=md5bf
+#pragma HLS INTERFACE s_axilite port=charset
+#pragma HLS INTERFACE s_axilite port=out
+#pragma HLS INTERFACE s_axilite port=return
+
+
+    unsigned char current[LENGTH];
+    // initialize the first sequence of characters
+    for (int i = 0; i < LENGTH; i++)
+    {
+        current[i] = charset[0];
+    }
+
+    // from all the items
+    int n = CHARSET_LENGTH;
+    // choose k items
+	int k = LENGTH;
+    long long max_iterations = compute_permutations_with_repetition(n, k);
+
+    for (long long i = 0; i < max_iterations; i++)
+    {
+        // pad data
+        char padded[BUFFER_SIZE];
+        unsigned int padded_size;
+        copy_pad(padded, current, LENGTH, padded_size);
+        unsigned int md5out[16];
+        md5((unsigned int*)padded, md5out, padded_size);
+
+        unsigned char md5out_hex[MD5_CHAR_LENGTH];
+        byte_to_hex_string((unsigned char*)md5out, MD5_CHAR_LENGTH, md5out_hex);
+        bool match = is_md5_match(md5bf, md5out_hex);
+        if (match)
+        {
+        	copy_uchar(out, current, LENGTH);
+        	break;
+        }
+        // Generate next combination on current
+        bool carry;
+        generate_next_combination(carry, current, charset);
+        if (carry) {
+            break;
+        }
+
+    }
+}
+
+void generate_next_combination(bool &carry, unsigned char *current, const unsigned char *charset) {
+#pragma HLS INLINE
+	carry = true;
+	for (int i = LENGTH - 1; i >= 0; --i) {
+		if (carry) {
+			int idx = 0;
+			for (int j = 0; j < CHARSET_LENGTH; j++) {
+				if (charset[j] == current[i]) {
+					idx = j;
+					break;
+				}
+			}
+			idx = (idx + 1) % CHARSET_LENGTH;
+			if (idx == 0) {
+				carry = true;
+			}
+			else {
+				carry = false;
+			}
+			current[i] = charset[idx];
+		}
+	}
+}
+
+bool is_md5_match(const unsigned char *in_1, unsigned char *in_2) {
+	bool match = true;
+	for (int i=0; i<MD5_CHAR_LENGTH; i++)
+	{
+		if (in_1[i] != in_2[i])
+		{
+			match = false;
+			break;
+		}
+	}
+	return match;
+}
+
+void copy_pad(char *padded, unsigned char *c, size_t length, unsigned int &padded_size) {
+	padded_size = 64;
+	unsigned int len = length;
+	unsigned int mod = (len + 1)%64;
+	unsigned int pad_size = (64+56-mod)%64;
+	padded_size = len+1+pad_size+8;
+
+	for (unsigned int i = 0; i < len; i++)
+	{
+		padded[i] = c[i];
+	}
+	padded[len] = (char)0x80;
+	for (unsigned int i = len + 1; i < len+1+pad_size; i++)
+	{
+		padded[i] = 0x0;
+	}
+
+	// Convert bytes to bits and append length
+	len <<= 3;
+	for(char* p = padded+(padded_size-8); p < padded+padded_size; ++p){
+		*p = len & 0xff;
+		len >>= 8;
+	}
+}
+
+void copy_uchar(unsigned char *to, unsigned char *from, size_t length) {
+	for (size_t i = 0; i < length; i++) {
+		to[i] = from[i];
+	}
+}
+
 void byte_to_hex_string(unsigned char* bytes, size_t length, unsigned char* hexString) {
     // Characters for hexadecimal representation
     const char hex_chars[] = "0123456789abcdef";
@@ -25,144 +141,13 @@ void byte_to_hex_string(unsigned char* bytes, size_t length, unsigned char* hexS
     hexString[length * 2] = '\0';
 }
 
-void generate_combinations(const unsigned char md5bf[32], const unsigned char charset[CHARSET_LENGTH], unsigned char out[4])
-{
-#pragma HLS INTERFACE s_axilite port=md5bf
-#pragma HLS INTERFACE s_axilite port=charset
-//#pragma HLS INTERFACE s_axilite port=charset_size
-#pragma HLS INTERFACE s_axilite port=out
-#pragma HLS INTERFACE s_axilite port=return
-
-    unsigned char current[4];
-    for (int i = 0; i < LENGTH; i++)
-    {
-        current[i] = charset[0];
-    }
-
-    // from all the items
-    ap_uint<8> n = CHARSET_LENGTH;
-    // choose r items
-	ap_uint<8> k = LENGTH;
-//    int max_iterations = sum_permutations(n, k);
-    int max_iterations = compute_permutations_with_repetition(n, k);
-    while (max_iterations--)
-    {
-
-        unsigned char c[4];
-        // copy data
-        for (int i = 0; i < LENGTH; i++)
-        {
-            c[i] = current[i];
-        }
-
-
-        // pad data
-        unsigned int padded_size = 64;
-        unsigned int len = LENGTH;
-        unsigned int mod = (len + 1)%64;
-        unsigned int pad_size = (64+56-mod)%64;
-        padded_size = len+1+pad_size+8;
-        char padded[BUFFER_SIZE];
-        for (unsigned int i = 0; i < len; i++)
-        {
-            padded[i] = c[i];
-        }
-        padded[len] = (char)0x80;
-        for (unsigned int i = len + 1; i < len+1+pad_size; i++)
-        {
-            padded[i] = 0x0;
-        }
-
-        // Convert bytes to bits and append length
-        len <<= 3;
-        for(char* p = padded+(padded_size-8); p < padded+padded_size; ++p){
-            *p = len & 0xff;
-            len >>= 8;
-        }
-
-        unsigned int md5out[16];
-        md5((unsigned int*)padded, md5out, padded_size);
-//        print_md5((unsigned char*)md5out);
-        unsigned char md5out_hex[32];
-        byte_to_hex_string((unsigned char*)md5out, 32, md5out_hex);
-        bool match = true;
-        for (int i=0; i<32; i++)
-        {
-        	if (md5bf[i] != md5out_hex[i])
-        	{
-        		match = false;
-        		break;
-        	}
-        }
-        if (match)
-        {
-        	for (int i = 0; i < LENGTH; i++)
-			{
-				out[i] = c[i];
-			}
-        	break;
-        }
-
-
-        // Generate next combination
-		bool carry = true;
-		for (int i = LENGTH - 1; i >= 0; --i) {
-			if (carry) {
-				int idx = 0;
-				for (int j = 0; j < CHARSET_LENGTH; j++) {
-					if (charset[j] == current[i]) {
-						idx = j;
-						break;
-					}
-				}
-				idx = (idx + 1) % CHARSET_LENGTH;
-				if (idx == 0) {
-					carry = true;
-				}
-				else {
-					carry = false;
-				}
-				current[i] = charset[idx];
-			}
-		}
-
-        if (carry) {
-            break;
-        }
-
-    }
-}
-
 // HLS function to compute the number of permutations with repetition
-ap_uint<32> compute_permutations_with_repetition(ap_uint<8> n, ap_uint<8> r) {
-    ap_uint<32> total_permutations = 1;
-    for(ap_uint<8> i = 0; i < r; ++i) {
+long long compute_permutations_with_repetition(int n, int r) {
+    long long total_permutations = 1;
+    for(int i = 0; i < r; ++i) {
         total_permutations *= n;
     }
     return total_permutations;
-}
-
-// Function to compute factorial of n.
-ap_uint<32> factorial(ap_uint<8> n) {
-    ap_uint<32> result = 1;
-    for(ap_uint<8> i = 1; i <= n; i++) {
-        result *= i;
-    }
-    return result;
-}
-
-// Function to compute permutations of n items taken r at a time.
-ap_uint<32> permutation(ap_uint<8> n, ap_uint<8> r) {
-    return factorial(n) / factorial(n-r);
-}
-
-// Function to compute sum of permutations of n items taken up to k at a time.
-ap_uint<32> sum_permutations(ap_uint<8> n, ap_uint<8> k) {
-    ap_uint<32> sum = 0;
-    for(ap_uint<8> i = 1; i <= k; i++) {
-        sum += permutation(n, i);
-    }
-    return sum;
 }
 
 const unsigned int K[] = {
