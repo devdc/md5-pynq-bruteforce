@@ -3,20 +3,30 @@
 
 
 void generate_next_combination(bool &carry, unsigned char *current, const unsigned char *charset);
-bool is_md5_match(const unsigned char *in_1, unsigned char *in_2);
 void copy_pad(char *padded, unsigned char *c, size_t length, unsigned int &padded_size);
 void copy_uchar(unsigned char *to, unsigned char *from, size_t length);
+unsigned int reorderBytes(unsigned int value);
 
 
-void generate_combinations(const unsigned char md5bf[MD5_CHAR_LENGTH], const unsigned char charset[CHARSET_LENGTH], unsigned char out[LENGTH])
+void generate_combinations(const unsigned int md5bf[4], const unsigned char charset[CHARSET_LENGTH], unsigned char out[LENGTH], int &found, volatile ap_uint<32> &progress)
 {
 
+#pragma HLS INTERFACE s_axilite port=progress
 #pragma HLS INTERFACE s_axilite port=md5bf
 #pragma HLS INTERFACE s_axilite port=charset
 #pragma HLS INTERFACE s_axilite port=out
+#pragma HLS INTERFACE s_axilite port=found
 #pragma HLS INTERFACE s_axilite port=return
+//#pragma HLS pipeline II=1 enable_flush
 
 
+	unsigned int md5bf_reversed[4];
+	for (int i=0; i<4; i++) {
+		md5bf_reversed[i] = reorderBytes(md5bf[i]);
+	}
+
+	found = 0;
+//	progress_t progress_data;
     unsigned char current[LENGTH];
     // initialize the first sequence of characters
     for (int i = 0; i < LENGTH; i++)
@@ -28,23 +38,37 @@ void generate_combinations(const unsigned char md5bf[MD5_CHAR_LENGTH], const uns
     int n = CHARSET_LENGTH;
     // choose k items
 	int k = LENGTH;
-    long long max_iterations = compute_permutations_with_repetition(n, k);
-
-    for (long long i = 0; i < max_iterations; i++)
+    ap_uint<32> max_iterations = compute_permutations_with_repetition(n, k);
+//    ap_uint<32> cycle = max_iterations / 5;
+    ap_uint<32> int_progress = 0;
+    for (ap_uint<32> i = 0; i < max_iterations; i++)
     {
+
         // pad data
         char padded[BUFFER_SIZE];
         unsigned int padded_size;
         copy_pad(padded, current, LENGTH, padded_size);
-        unsigned int md5out[16];
-        md5((unsigned int*)padded, md5out, padded_size);
 
-        unsigned char md5out_hex[MD5_CHAR_LENGTH];
-        byte_to_hex_string((unsigned char*)md5out, MD5_CHAR_LENGTH, md5out_hex);
-        bool match = is_md5_match(md5bf, md5out_hex);
+        unsigned int md5out[4];
+		md5((unsigned int*)padded, md5out, padded_size);
+
+		bool match = true;
+		for (int i=0; i < 4; i++) {
+			if (md5bf_reversed[i] != md5out[i]) {
+				match = false;
+				break;
+			}
+		}
+
+
         if (match)
         {
         	copy_uchar(out, current, LENGTH);
+        	found = 1;
+        	// if found send last signal
+//        	progress = i;
+//        	progress_data.last = true;
+//        	progress << progress_data;
         	break;
         }
         // Generate next combination on current
@@ -54,11 +78,33 @@ void generate_combinations(const unsigned char md5bf[MD5_CHAR_LENGTH], const uns
             break;
         }
 
+
+//        if (i == 10 || i % cycle == 0) {
+			// Send progress data
+//			progress = i;
+//			progress_data.last = 0;
+//			progress << progress_data;
+//		}
+//        if (i == max_iterations-1) {
+//        	progress = i;
+        	// Signal the end of the stream
+//        	progress_data.last = true;
+//        	progress << progress_data;
+//        }
+        // Send progress data
+		int_progress++;
+		progress = int_progress;
     }
 }
 
+unsigned int reorderBytes(unsigned int value) {
+    return ((value & 0x000000FF) << 24) |  // Move the last byte to the first
+           ((value & 0x0000FF00) << 8)  |  // Move the third byte to the second
+           ((value & 0x00FF0000) >> 8)  |  // Move the second byte to the third
+           ((value & 0xFF000000) >> 24);   // Move the first byte to the last
+}
+
 void generate_next_combination(bool &carry, unsigned char *current, const unsigned char *charset) {
-#pragma HLS INLINE
 	carry = true;
 	for (int i = LENGTH - 1; i >= 0; --i) {
 		if (carry) {
@@ -81,18 +127,6 @@ void generate_next_combination(bool &carry, unsigned char *current, const unsign
 	}
 }
 
-bool is_md5_match(const unsigned char *in_1, unsigned char *in_2) {
-	bool match = true;
-	for (int i=0; i<MD5_CHAR_LENGTH; i++)
-	{
-		if (in_1[i] != in_2[i])
-		{
-			match = false;
-			break;
-		}
-	}
-	return match;
-}
 
 void copy_pad(char *padded, unsigned char *c, size_t length, unsigned int &padded_size) {
 	padded_size = 64;
@@ -125,21 +159,6 @@ void copy_uchar(unsigned char *to, unsigned char *from, size_t length) {
 	}
 }
 
-void byte_to_hex_string(unsigned char* bytes, size_t length, unsigned char* hexString) {
-    // Characters for hexadecimal representation
-    const char hex_chars[] = "0123456789abcdef";
-
-    for (size_t i = 0; i < length; ++i) {
-        // Convert the high nibble (first 4 bits) to hex
-        hexString[i * 2] = hex_chars[(bytes[i] >> 4) & 0x0F];
-
-        // Convert the low nibble (last 4 bits) to hex
-        hexString[i * 2 + 1] = hex_chars[bytes[i] & 0x0F];
-    }
-
-    // Null-terminate the string
-    hexString[length * 2] = '\0';
-}
 
 // HLS function to compute the number of permutations with repetition
 long long compute_permutations_with_repetition(int n, int r) {
